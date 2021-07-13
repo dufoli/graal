@@ -40,7 +40,6 @@ import java.util.TreeMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Collectors;
 
-import com.oracle.svm.core.option.HostedOptionValues;
 import org.graalvm.compiler.code.CompilationResult;
 import org.graalvm.compiler.code.DataSection;
 import org.graalvm.compiler.debug.DebugContext;
@@ -69,6 +68,7 @@ import com.oracle.svm.core.deopt.DeoptEntryInfopoint;
 import com.oracle.svm.core.graal.code.SubstrateDataBuilder;
 import com.oracle.svm.core.meta.SubstrateObjectConstant;
 import com.oracle.svm.core.option.HostedOptionKey;
+import com.oracle.svm.core.option.HostedOptionValues;
 import com.oracle.svm.core.util.Counter;
 import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.hosted.NativeImageOptions;
@@ -217,6 +217,23 @@ public abstract class NativeImageCodeCache {
             final HostedMethod method = entry.getKey();
             final CompilationResult compilation = entry.getValue();
             codeInfoEncoder.addMethod(method, compilation, method.getCodeAddressOffset());
+        }
+
+        for (HostedType type : imageHeap.getUniverse().getTypes()) {
+            if (type.getWrapped().isReachable()) {
+                codeInfoEncoder.addClass(type.getJavaClass());
+            }
+        }
+        for (HostedType type : imageHeap.getUniverse().getTypes()) {
+            Class<?> javaClass = null;
+            try {
+                javaClass = type.getJavaClass();
+            } catch (Throwable t) {
+                System.out.println("Unknown type " + type + ": " + t);
+            }
+            if (javaClass != null && type.getWrapped().isReachable()) {
+                codeInfoEncoder.addMethodMetadata(javaClass, type.getTypeID());
+            }
         }
 
         if (NativeImageOptions.PrintMethodHistogram.getValue()) {

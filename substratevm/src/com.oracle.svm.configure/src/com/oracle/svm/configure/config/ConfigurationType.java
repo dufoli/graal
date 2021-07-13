@@ -40,6 +40,7 @@ public class ConfigurationType implements JsonPrintable {
 
     private Map<String, FieldInfo> fields;
     private Map<ConfigurationMethod, ConfigurationMemberKind> methods;
+    private Map<ConfigurationMethod, ConfigurationMemberKind> queriedMethods;
 
     private boolean allDeclaredClasses;
     private boolean allPublicClasses;
@@ -49,6 +50,10 @@ public class ConfigurationType implements JsonPrintable {
     private boolean allPublicMethods;
     private boolean allDeclaredConstructors;
     private boolean allPublicConstructors;
+    private boolean queryAllDeclaredMethods;
+    private boolean queryAllPublicMethods;
+    private boolean queryAllDeclaredConstructors;
+    private boolean queryAllPublicConstructors;
 
     public ConfigurationType(String qualifiedJavaName) {
         assert qualifiedJavaName.indexOf('/') == -1 : "Requires qualified Java name, not internal representation";
@@ -213,27 +218,42 @@ public class ConfigurationType implements JsonPrintable {
         addMethod(name, null, memberKind);
     }
 
+    public void addQueriedMethodsWithName(String name, ConfigurationMemberKind memberKind) {
+        addQueriedMethod(name, null, memberKind);
+    }
+
     public void addMethod(String name, String internalSignature, ConfigurationMemberKind memberKind) {
+        methods = addMethodToMap(name, internalSignature, memberKind, methods);
+    }
+
+    public void addQueriedMethod(String name, String internalSignature, ConfigurationMemberKind memberKind) {
+        queriedMethods = addMethodToMap(name, internalSignature, memberKind, queriedMethods);
+    }
+
+    private Map<ConfigurationMethod, ConfigurationMemberKind> addMethodToMap(String name, String internalSignature, ConfigurationMemberKind memberKind,
+                    Map<ConfigurationMethod, ConfigurationMemberKind> originalMethodsMap) {
         boolean matchesAllSignatures = (internalSignature == null);
+        Map<ConfigurationMethod, ConfigurationMemberKind> methodsMap = originalMethodsMap;
         if (ConfigurationMethod.isConstructorName(name) ? (haveAllDeclaredConstructors() || (memberKind.includes(ConfigurationMemberKind.PUBLIC) && haveAllPublicConstructors()))
                         : ((memberKind.includes(ConfigurationMemberKind.DECLARED) && haveAllDeclaredMethods()) || (memberKind.includes(ConfigurationMemberKind.PUBLIC) && haveAllPublicMethods()))) {
             if (!matchesAllSignatures) {
-                methods = maybeRemove(methods, map -> map.remove(new ConfigurationMethod(name, internalSignature)));
+                methodsMap = maybeRemove(methodsMap, map -> map.remove(new ConfigurationMethod(name, internalSignature)));
             }
-            return;
+            return methodsMap;
         }
-        if (methods == null) {
-            methods = new HashMap<>();
+        if (methodsMap == null) {
+            methodsMap = new HashMap<>();
         }
         ConfigurationMethod method = new ConfigurationMethod(name, internalSignature);
-        if (matchesAllSignatures) { // remove any methods that the new entry matches
-            methods.compute(method, (k, v) -> v != null ? memberKind.union(v) : memberKind);
-            methods = maybeRemove(methods, map -> map.entrySet().removeIf(entry -> name.equals(entry.getKey().getName()) &&
+        if (matchesAllSignatures) { // remove any methodsMap that the new entry matches
+            methodsMap.compute(method, (k, v) -> v != null ? memberKind.union(v) : memberKind);
+            methodsMap = maybeRemove(methodsMap, map -> map.entrySet().removeIf(entry -> name.equals(entry.getKey().getName()) &&
                             memberKind.includes(entry.getValue()) && !method.equals(entry.getKey())));
         } else {
-            methods.compute(method, (k, v) -> v != null ? memberKind.intersect(v) : memberKind);
+            methodsMap.compute(method, (k, v) -> v != null ? memberKind.intersect(v) : memberKind);
         }
-        assert methods.containsKey(method);
+        assert methodsMap.containsKey(method);
+        return methodsMap;
     }
 
     public ConfigurationMemberKind getMethodKindIfPresent(ConfigurationMethod method) {
@@ -314,6 +334,42 @@ public class ConfigurationType implements JsonPrintable {
         removeMethods(ConfigurationMemberKind.PUBLIC, true);
     }
 
+    public boolean haveQueryAllDeclaredMethods() {
+        return queryAllDeclaredMethods;
+    }
+
+    public boolean haveQueryAllPublicMethods() {
+        return queryAllPublicMethods;
+    }
+
+    public void setQueryAllDeclaredMethods() {
+        this.queryAllDeclaredMethods = true;
+        removeQueriedMethods(ConfigurationMemberKind.DECLARED, false);
+    }
+
+    public void setQueryAllPublicMethods() {
+        this.queryAllPublicMethods = true;
+        removeQueriedMethods(ConfigurationMemberKind.PUBLIC, false);
+    }
+
+    public boolean haveQueryAllDeclaredConstructors() {
+        return queryAllDeclaredConstructors;
+    }
+
+    public boolean haveQueryAllPublicConstructors() {
+        return queryAllPublicConstructors;
+    }
+
+    public void setQueryAllDeclaredConstructors() {
+        this.queryAllDeclaredConstructors = true;
+        removeQueriedMethods(ConfigurationMemberKind.DECLARED, true);
+    }
+
+    public void setQueryAllPublicConstructors() {
+        this.queryAllPublicConstructors = true;
+        removeQueriedMethods(ConfigurationMemberKind.PUBLIC, true);
+    }
+
     @Override
     public void printJson(JsonWriter writer) throws IOException {
         writer.append('{').indent().newline();
@@ -326,6 +382,10 @@ public class ConfigurationType implements JsonPrintable {
         optionallyPrintJsonBoolean(writer, haveAllPublicConstructors(), "allPublicConstructors");
         optionallyPrintJsonBoolean(writer, haveAllDeclaredClasses(), "allDeclaredClasses");
         optionallyPrintJsonBoolean(writer, haveAllPublicClasses(), "allPublicClasses");
+        optionallyPrintJsonBoolean(writer, haveQueryAllDeclaredMethods(), "queryAllDeclaredMethods");
+        optionallyPrintJsonBoolean(writer, haveQueryAllPublicMethods(), "queryAllPublicMethods");
+        optionallyPrintJsonBoolean(writer, haveQueryAllDeclaredConstructors(), "queryAllDeclaredConstructors");
+        optionallyPrintJsonBoolean(writer, haveQueryAllPublicConstructors(), "queryAllPublicConstructors");
         if (fields != null) {
             writer.append(',').newline().quote("fields").append(':');
             JsonPrinter.printCollection(writer, fields.entrySet(), Map.Entry.comparingByKey(), ConfigurationType::printField);
@@ -334,6 +394,13 @@ public class ConfigurationType implements JsonPrintable {
             writer.append(',').newline().quote("methods").append(':');
             JsonPrinter.printCollection(writer,
                             methods.keySet(),
+                            Comparator.comparing(ConfigurationMethod::getName).thenComparing(Comparator.nullsFirst(Comparator.comparing(ConfigurationMethod::getInternalSignature))),
+                            JsonPrintable::printJson);
+        }
+        if (queriedMethods != null) {
+            writer.append(',').newline().quote("queriedMethods").append(':');
+            JsonPrinter.printCollection(writer,
+                            queriedMethods.keySet(),
                             Comparator.comparing(ConfigurationMethod::getName).thenComparing(Comparator.nullsFirst(Comparator.comparing(ConfigurationMethod::getInternalSignature))),
                             JsonPrintable::printJson);
         }
@@ -361,6 +428,10 @@ public class ConfigurationType implements JsonPrintable {
 
     private void removeMethods(ConfigurationMemberKind memberKind, boolean constructors) {
         methods = maybeRemove(methods, map -> map.entrySet().removeIf(entry -> entry.getKey().isConstructor() == constructors && memberKind.includes(entry.getValue())));
+    }
+
+    private void removeQueriedMethods(ConfigurationMemberKind memberKind, boolean constructors) {
+        queriedMethods = maybeRemove(queriedMethods, map -> map.entrySet().removeIf(entry -> entry.getKey().isConstructor() == constructors && memberKind.includes(entry.getValue())));
     }
 
     private static <T, S> Map<T, S> maybeRemove(Map<T, S> fromMap, Consumer<Map<T, S>> action) {

@@ -45,6 +45,7 @@ import org.graalvm.nativeimage.hosted.Feature.DuringAnalysisAccess;
 import org.graalvm.nativeimage.impl.RuntimeReflectionSupport;
 
 import com.oracle.graal.pointsto.meta.AnalysisType;
+import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.hub.ClassForNameSupport;
 import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.jdk.RecordSupport;
@@ -69,6 +70,7 @@ public class ReflectionDataBuilder implements RuntimeReflectionSupport {
     private final Set<Class<?>> reflectionClasses = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Set<Executable> reflectionMethods = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Set<Field> reflectionFields = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Set<Executable> queriedMethods; // TODO where is better?
 
     /* Keep track of classes already processed for reflection. */
     private final Set<Class<?>> processedClasses = new HashSet<>();
@@ -78,6 +80,7 @@ public class ReflectionDataBuilder implements RuntimeReflectionSupport {
     public ReflectionDataBuilder(FeatureAccessImpl access) {
         arrayReflectionData = getArrayReflectionData();
         accessors = new ReflectionDataAccessors(access);
+        queriedMethods = SubstrateOptions.ConfigureReflectionMetadata.getValue() ? ConcurrentHashMap.newKeySet() : null;
     }
 
     private static DynamicHub.ReflectionData getArrayReflectionData() {
@@ -122,6 +125,19 @@ public class ReflectionDataBuilder implements RuntimeReflectionSupport {
         checkNotSealed();
         for (Executable method : methods) {
             if (reflectionMethods.add(method)) {
+                modifiedClasses.add(method.getDeclaringClass());
+            }
+        }
+    }
+
+    @Override
+    public void registerAsQueried(Executable... methods) {
+        checkNotSealed();
+        if (!SubstrateOptions.ConfigureReflectionMetadata.getValue()) {
+            throw UserError.abort("Found manual reflection metadata configuration. Please use --configure-reflection-metadata to enable this behavior.");
+        }
+        for (Executable method : methods) {
+            if (queriedMethods.add(method)) {
                 modifiedClasses.add(method.getDeclaringClass());
             }
         }

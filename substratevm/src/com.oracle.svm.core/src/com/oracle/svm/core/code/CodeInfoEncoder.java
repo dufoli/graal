@@ -26,11 +26,18 @@ package com.oracle.svm.core.code;
 
 import static com.oracle.svm.core.util.VMError.shouldNotReachHere;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Executable;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.List;
+import java.util.Map;
 import java.util.TreeMap;
 
 import org.graalvm.compiler.code.CompilationResult;
 import org.graalvm.compiler.core.common.NumUtil;
+import org.graalvm.compiler.core.common.util.FrequencyEncoder;
 import org.graalvm.compiler.core.common.util.TypeConversion;
 import org.graalvm.compiler.core.common.util.UnsafeArrayTypeWriter;
 import org.graalvm.compiler.options.Option;
@@ -41,8 +48,10 @@ import org.graalvm.word.WordFactory;
 
 import com.oracle.svm.core.CalleeSavedRegisters;
 import com.oracle.svm.core.ReservedRegisters;
+import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.c.NonmovableArray;
 import com.oracle.svm.core.c.NonmovableArrays;
+import com.oracle.svm.core.c.NonmovableObjectArray;
 import com.oracle.svm.core.code.FrameInfoQueryResult.ValueInfo;
 import com.oracle.svm.core.code.FrameInfoQueryResult.ValueType;
 import com.oracle.svm.core.config.ConfigurationValues;
@@ -97,6 +106,52 @@ public class CodeInfoEncoder {
         final Counter virtualObjectsCount = new Counter(group, "Number of virtual objects", "Number of virtual objects encoded");
     }
 
+    public static final class Encoders {
+        final FrequencyEncoder<JavaConstant> objectConstants;
+        final FrequencyEncoder<Class<?>> sourceClasses;
+        final FrequencyEncoder<String> sourceMethodNames;
+        final FrequencyEncoder<String> names;
+
+        private Encoders() {
+            this.objectConstants = FrequencyEncoder.createEqualityEncoder();
+            this.sourceClasses = FrequencyEncoder.createEqualityEncoder();
+            this.sourceMethodNames = FrequencyEncoder.createEqualityEncoder();
+            if (FrameInfoDecoder.encodeDebugNames() || FrameInfoDecoder.encodeSourceReferences()) {
+                this.names = FrequencyEncoder.createEqualityEncoder();
+            } else {
+                this.names = null;
+            }
+        }
+
+        private void encodeAllAndInstall(CodeInfo target, ReferenceAdjuster adjuster) {
+            JavaConstant[] encodedJavaConstants = objectConstants.encodeAll(new JavaConstant[objectConstants.getLength()]);
+            Class<?>[] sourceClassesArray = null;
+            String[] sourceMethodNamesArray = null;
+            String[] namesArray = null;
+            final boolean encodeDebugNames = FrameInfoDecoder.encodeDebugNames();
+            if (encodeDebugNames || FrameInfoDecoder.encodeSourceReferences()) {
+                sourceClassesArray = sourceClasses.encodeAll(new Class<?>[sourceClasses.getLength()]);
+                sourceMethodNamesArray = sourceMethodNames.encodeAll(new String[sourceMethodNames.getLength()]);
+            }
+            if (encodeDebugNames) {
+                namesArray = names.encodeAll(new String[names.getLength()]);
+            }
+            install(target, encodedJavaConstants, sourceClassesArray, sourceMethodNamesArray, namesArray, adjuster);
+        }
+
+        @Uninterruptible(reason = "Nonmovable object arrays are not visible to GC until installed in target.")
+        private static void install(CodeInfo target, JavaConstant[] objectConstantsArray, Class<?>[] sourceClassesArray,
+                        String[] sourceMethodNamesArray, String[] namesArray, ReferenceAdjuster adjuster) {
+
+            NonmovableObjectArray<Object> frameInfoObjectConstants = adjuster.copyOfObjectConstantArray(objectConstantsArray);
+            NonmovableObjectArray<Class<?>> frameInfoSourceClasses = (sourceClassesArray != null) ? adjuster.copyOfObjectArray(sourceClassesArray) : NonmovableArrays.nullArray();
+            NonmovableObjectArray<String> frameInfoSourceMethodNames = (sourceMethodNamesArray != null) ? adjuster.copyOfObjectArray(sourceMethodNamesArray) : NonmovableArrays.nullArray();
+            NonmovableObjectArray<String> frameInfoNames = (namesArray != null) ? adjuster.copyOfObjectArray(namesArray) : NonmovableArrays.nullArray();
+
+            CodeInfoAccess.setEncodings(target, frameInfoObjectConstants, frameInfoSourceClasses, frameInfoSourceMethodNames, frameInfoNames);
+        }
+    }
+
     static class IPData {
         protected long ip;
         protected int frameSizeEncoding;
@@ -107,16 +162,32 @@ public class CodeInfoEncoder {
         protected IPData next;
     }
 
+    public static class MethodData {
+        public Class<?> declaringClass;
+        public String name;
+        public Class<?>[] paramTypes;
+        public Class<?> returnType;
+        public Class<?>[] exceptionTypes;
+        public int modifiers;
+// protected byte[] annotations;
+    }
+
     private final TreeMap<Long, IPData> entries;
+    private final Encoders encoders;
     private final FrameInfoEncoder frameInfoEncoder;
+    private final TreeMap<Long, MethodData[]> methodData;
 
     private NonmovableArray<Byte> codeInfoIndex;
     private NonmovableArray<Byte> codeInfoEncodings;
     private NonmovableArray<Byte> referenceMapEncoding;
+    private NonmovableArray<Byte> methodDataEncoding;
+    private NonmovableArray<Byte> methodDataIndexEncoding;
 
     public CodeInfoEncoder(FrameInfoEncoder.Customization frameInfoCustomization) {
         this.entries = new TreeMap<>();
-        this.frameInfoEncoder = new FrameInfoEncoder(frameInfoCustomization);
+        this.encoders = new Encoders();
+        this.frameInfoEncoder = new FrameInfoEncoder(frameInfoCustomization, encoders);
+        this.methodData = new TreeMap<>();
     }
 
     public static int getEntryOffset(Infopoint infopoint) {
@@ -129,6 +200,10 @@ public class CodeInfoEncoder {
             return offset;
         }
         return -1;
+    }
+
+    public void addClass(Class<?> clazz) {
+        encoders.sourceClasses.addObject(clazz);
     }
 
     public void addMethod(SharedMethod method, CompilationResult compilation, int compilationOffset) {
@@ -173,6 +248,39 @@ public class CodeInfoEncoder {
         ImageSingletons.lookup(Counters.class).codeSize.add(compilation.getTargetCodeSize());
     }
 
+    public void addMethodMetadata(Class<?> clazz, long id) {
+        List<MethodData> data = new ArrayList<>();
+        try {
+            for (Method m : clazz.getDeclaredMethods()) {
+                data.add(getMethodData(m));
+            }
+        } catch (Throwable t) {
+            // ignore
+        }
+
+        try {
+            for (Constructor<?> c : clazz.getDeclaredConstructors()) {
+                data.add(getMethodData(c));
+            }
+        } catch (Throwable t) {
+            // ignore
+        }
+        methodData.put(id, data.toArray(new MethodData[0]));
+    }
+
+    private MethodData getMethodData(Executable m) {
+        MethodData data = new MethodData();
+        data.declaringClass = m.getDeclaringClass();
+        encoders.sourceClasses.addObject(data.declaringClass);
+        data.name = m instanceof Constructor ? "<init>" : m.getName();
+        encoders.sourceMethodNames.addObject(data.name);
+        data.modifiers = m.getModifiers();
+        data.paramTypes = m.getParameterTypes();
+        data.returnType = (m instanceof Method) ? ((Method) m).getReturnType() : null;
+        data.exceptionTypes = m.getExceptionTypes();
+        return data;
+    }
+
     private IPData makeEntry(long ip) {
         IPData result = entries.get(ip);
         if (result == null) {
@@ -184,15 +292,17 @@ public class CodeInfoEncoder {
     }
 
     public void encodeAllAndInstall(CodeInfo target, ReferenceAdjuster adjuster) {
+        encoders.encodeAllAndInstall(target, adjuster);
         encodeReferenceMaps();
-        frameInfoEncoder.encodeAllAndInstall(target, adjuster);
+        frameInfoEncoder.encodeAllAndInstall(target);
+        encodeMethodMetadata();
         encodeIPData();
 
         install(target);
     }
 
     private void install(CodeInfo target) {
-        CodeInfoAccess.setCodeInfo(target, codeInfoIndex, codeInfoEncodings, referenceMapEncoding);
+        CodeInfoAccess.setCodeInfo(target, codeInfoIndex, codeInfoEncodings, referenceMapEncoding, methodDataEncoding, methodDataIndexEncoding);
     }
 
     private void encodeReferenceMaps() {
@@ -204,6 +314,90 @@ public class CodeInfoEncoder {
         for (IPData data : entries.values()) {
             data.referenceMapIndex = referenceMapEncoder.lookupEncoding(data.referenceMap);
         }
+    }
+
+    private void encodeMethodMetadata() {
+        UnsafeArrayTypeWriter dataEncodingBuffer = UnsafeArrayTypeWriter.create(ByteArrayReader.supportsUnalignedMemoryAccess());
+        UnsafeArrayTypeWriter indexEncodingBuffer = UnsafeArrayTypeWriter.create(ByteArrayReader.supportsUnalignedMemoryAccess());
+        long lastTypeID = -1;
+        for (Map.Entry<Long, MethodData[]> entry : methodData.entrySet()) {
+            long typeID = entry.getKey();
+            assert typeID > lastTypeID;
+            lastTypeID++;
+            while (lastTypeID < typeID) {
+                indexEncodingBuffer.putU4(0);
+                lastTypeID++;
+            }
+            long index = dataEncodingBuffer.getBytesWritten();
+            indexEncodingBuffer.putU4(index);
+            MethodData[] classData = filterMethods(entry.getValue());
+            dataEncodingBuffer.putUV(classData.length);
+            for (MethodData data : classData) {
+                final int declaringClassIndex = encoders.sourceClasses.getIndex(data.declaringClass);
+                dataEncodingBuffer.putSV(declaringClassIndex);
+                final int nameIndex = encoders.sourceMethodNames.getIndex(data.name);
+                dataEncodingBuffer.putSV(nameIndex);
+                dataEncodingBuffer.putUV(data.modifiers);
+                dataEncodingBuffer.putUV(data.paramTypes.length);
+                for (Class<?> paramClazz : data.paramTypes) {
+                    try { // TODO condition
+                        final int classIndex = encoders.sourceClasses.getIndex(paramClazz);
+                        dataEncodingBuffer.putSV(classIndex);
+                    } catch (Throwable t) {
+                        dataEncodingBuffer.putSV(-1);
+                    }
+                }
+                try {
+                    final int classIndex = encoders.sourceClasses.getIndex(data.returnType);
+                    dataEncodingBuffer.putSV(classIndex);
+                } catch (Throwable t) {
+                    dataEncodingBuffer.putSV(-1);
+                }
+                dataEncodingBuffer.putUV(data.exceptionTypes.length);
+                for (Class<?> exceptionClazz : data.exceptionTypes) {
+                    try {
+                        final int classIndex = encoders.sourceClasses.getIndex(exceptionClazz);
+                        dataEncodingBuffer.putSV(classIndex);
+                    } catch (Throwable t) {
+                        dataEncodingBuffer.putSV(-1);
+                    }
+                }
+// if (cur.sourceMethodAnnotations != null) {
+// for (byte b : cur.sourceMethodAnnotations) {
+// encodingBuffer.putU1(b); // TODO replace indices (here?)
+// }
+// }
+            }
+        }
+        methodDataEncoding = NonmovableArrays.createByteArray(TypeConversion.asS4(dataEncodingBuffer.getBytesWritten()));
+        dataEncodingBuffer.toByteBuffer(NonmovableArrays.asByteBuffer(methodDataEncoding));
+        methodDataIndexEncoding = NonmovableArrays.createByteArray(TypeConversion.asS4(indexEncodingBuffer.getBytesWritten()));
+        indexEncodingBuffer.toByteBuffer(NonmovableArrays.asByteBuffer(methodDataIndexEncoding));
+    }
+
+    private MethodData[] filterMethods(MethodData[] methods) {
+        List<MethodData> newMethods = new ArrayList<>();
+        for (MethodData data : methods) {
+            boolean include = true;
+            for (Class<?> paramType : data.paramTypes) {
+                try {
+                    encoders.sourceClasses.getIndex(paramType); // TODO cleanly
+                } catch (Throwable t) {
+                    include = false;
+                }
+            }
+            for (Class<?> paramType : data.exceptionTypes) {
+                try {
+                    encoders.sourceClasses.getIndex(paramType); // TODO cleanly
+                } catch (Throwable t) {
+                    include = false;
+                }
+            }
+            if (include) {
+                newMethods.add(data);
+            }
+        }
+        return newMethods.toArray(new MethodData[0]);
     }
 
     /**

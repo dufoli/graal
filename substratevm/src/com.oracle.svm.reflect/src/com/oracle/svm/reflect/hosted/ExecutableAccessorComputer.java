@@ -56,8 +56,8 @@ public final class ExecutableAccessorComputer implements RecomputeFieldValue.Cus
         ReflectionSubstitution subst = ImageSingletons.lookup(ReflectionSubstitution.class);
         Class<?> proxyClass = subst.getProxyClass(member);
         if (proxyClass == null) {
-            // should never happen, but better check for it here than segfault later
-            throw VMError.shouldNotReachHere();
+            // means the proxy didn't get included in the image
+            return null;
         }
         try {
             Proxy proxyInstance = (Proxy) UNSAFE.allocateInstance(proxyClass);

@@ -27,7 +27,6 @@ package com.oracle.svm.core.code;
 import java.util.Arrays;
 import java.util.List;
 
-import com.oracle.svm.core.heap.ReferenceMapIndex;
 import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.compiler.options.Option;
 import org.graalvm.nativeimage.ImageSingletons;
@@ -46,12 +45,14 @@ import com.oracle.svm.core.deopt.DeoptimizedFrame;
 import com.oracle.svm.core.deopt.SubstrateInstalledCode;
 import com.oracle.svm.core.heap.CodeReferenceMapDecoder;
 import com.oracle.svm.core.heap.ObjectReferenceVisitor;
+import com.oracle.svm.core.heap.ReferenceMapIndex;
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.thread.JavaVMOperation;
 import com.oracle.svm.core.thread.VMOperation;
 import com.oracle.svm.core.util.Counter;
 import com.oracle.svm.core.util.CounterFeature;
+import com.oracle.svm.core.util.NonmovableByteArrayTypeReader;
 import com.oracle.svm.core.util.VMError;
 
 import jdk.vm.ci.code.InstalledCode;
@@ -154,6 +155,53 @@ public class CodeInfoTable {
         Log.log().string("ip: ").hex(ip).string("  sp: ").hex(sp).string("  info:");
         CodeInfoAccess.log(info, Log.log()).newline();
         throw VMError.shouldNotReachHere("No reference map information found");
+    }
+
+    public static CodeInfoEncoder.MethodData[] getMethodMetadata(CodeInfo info, long typeID) {
+        NonmovableArray<Byte> index = CodeInfoAccess.getMethodReflectionMetadataIndexEncoding(info);
+        NonmovableByteArrayTypeReader indexReader = new NonmovableByteArrayTypeReader(index, 4 * typeID);
+        int offset = (int) indexReader.getU4();
+        NonmovableArray<Byte> data = CodeInfoAccess.getMethodReflectionMetadataEncoding(info);
+        NonmovableByteArrayTypeReader dataReader = new NonmovableByteArrayTypeReader(data, offset);
+
+        int methodCount = dataReader.getUVInt();
+        CodeInfoEncoder.MethodData[] methods = new CodeInfoEncoder.MethodData[methodCount];
+        for (int i = 0; i < methodCount; ++i) {
+            CodeInfoEncoder.MethodData methodData = new CodeInfoEncoder.MethodData();
+            int declaringClassIndex = dataReader.getSVInt();
+            methodData.declaringClass = NonmovableArrays.getObject(CodeInfoAccess.getFrameInfoSourceClasses(info), declaringClassIndex);
+            int nameIndex = dataReader.getSVInt();
+            methodData.name = NonmovableArrays.getObject(CodeInfoAccess.getFrameInfoSourceMethodNames(info), nameIndex);
+            methodData.modifiers = dataReader.getUVInt();
+            int paramCount = dataReader.getUVInt();
+            methodData.paramTypes = new Class<?>[paramCount];
+            for (int j = 0; j < paramCount; ++j) {
+                int paramTypeIndex = dataReader.getSVInt();
+                if (paramTypeIndex == -1) {
+                    methodData.paramTypes[j] = null;
+                } else {
+                    methodData.paramTypes[j] = NonmovableArrays.getObject(CodeInfoAccess.getFrameInfoSourceClasses(info), paramTypeIndex);
+                }
+            }
+            int returnTypeIndex = dataReader.getSVInt();
+            if (returnTypeIndex == -1) {
+                methodData.returnType = null;
+            } else {
+                methodData.returnType = NonmovableArrays.getObject(CodeInfoAccess.getFrameInfoSourceClasses(info), returnTypeIndex);
+            }
+            int exceptionCount = dataReader.getUVInt();
+            methodData.exceptionTypes = new Class<?>[exceptionCount];
+            for (int j = 0; j < exceptionCount; ++j) {
+                int exceptionTypeIndex = dataReader.getSVInt();
+                if (exceptionTypeIndex == -1) {
+                    methodData.exceptionTypes[j] = null;
+                } else {
+                    methodData.exceptionTypes[j] = NonmovableArrays.getObject(CodeInfoAccess.getFrameInfoSourceClasses(info), exceptionTypeIndex);
+                }
+            }
+            methods[i] = methodData;
+        }
+        return methods;
     }
 
     /**
@@ -289,6 +337,8 @@ class CodeInfoFeature implements Feature {
         config.registerAsImmutable(imageInfo.codeInfoIndex);
         config.registerAsImmutable(imageInfo.codeInfoEncodings);
         config.registerAsImmutable(imageInfo.referenceMapEncoding);
+        config.registerAsImmutable(imageInfo.methodDataEncoding);
+        config.registerAsImmutable(imageInfo.methodDataIndexEncoding);
         config.registerAsImmutable(imageInfo.frameInfoEncodings);
         config.registerAsImmutable(imageInfo.frameInfoObjectConstants);
         config.registerAsImmutable(imageInfo.frameInfoSourceClasses);

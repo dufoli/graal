@@ -55,25 +55,41 @@ public class ParserConfigurationAdapter implements ReflectionConfigurationParser
     }
 
     @Override
-    public boolean registerAllMethodsWithName(ConfigurationType type, String methodName) {
-        type.addMethodsWithName(methodName, ConfigurationMemberKind.PRESENT);
+    public boolean registerAllMethodsWithName(ConfigurationType type, String methodName, boolean queriedOnly) {
+        if (queriedOnly) {
+            type.addQueriedMethodsWithName(methodName, ConfigurationMemberKind.PRESENT);
+        } else {
+            type.addMethodsWithName(methodName, ConfigurationMemberKind.PRESENT);
+        }
         return true;
     }
 
     @Override
-    public boolean registerAllConstructors(ConfigurationType type) {
-        type.addMethodsWithName(ConfigurationMethod.CONSTRUCTOR_NAME, ConfigurationMemberKind.PRESENT);
+    public boolean registerAllConstructors(ConfigurationType type, boolean queriedOnly) {
+        if (queriedOnly) {
+            type.addQueriedMethodsWithName(ConfigurationMethod.CONSTRUCTOR_NAME, ConfigurationMemberKind.PRESENT);
+        } else {
+            type.addMethodsWithName(ConfigurationMethod.CONSTRUCTOR_NAME, ConfigurationMemberKind.PRESENT);
+        }
         return true;
     }
 
     @Override
-    public void registerMethod(ConfigurationType type, String methodName, List<ConfigurationType> methodParameterTypes) {
-        type.addMethod(methodName, ConfigurationMethod.toInternalParamsSignature(methodParameterTypes), ConfigurationMemberKind.PRESENT);
+    public void registerMethod(ConfigurationType type, String methodName, List<ConfigurationType> methodParameterTypes, boolean queriedOnly) {
+        if (queriedOnly) {
+            type.addQueriedMethod(methodName, ConfigurationMethod.toInternalParamsSignature(methodParameterTypes), ConfigurationMemberKind.PRESENT);
+        } else {
+            type.addMethod(methodName, ConfigurationMethod.toInternalParamsSignature(methodParameterTypes), ConfigurationMemberKind.PRESENT);
+        }
     }
 
     @Override
-    public void registerConstructor(ConfigurationType type, List<ConfigurationType> methodParameterTypes) {
-        type.addMethod(ConfigurationMethod.CONSTRUCTOR_NAME, ConfigurationMethod.toInternalParamsSignature(methodParameterTypes), ConfigurationMemberKind.PRESENT);
+    public void registerConstructor(ConfigurationType type, List<ConfigurationType> methodParameterTypes, boolean queriedOnly) {
+        if (queriedOnly) {
+            type.addQueriedMethod(ConfigurationMethod.CONSTRUCTOR_NAME, ConfigurationMethod.toInternalParamsSignature(methodParameterTypes), ConfigurationMemberKind.PRESENT);
+        } else {
+            type.addMethod(ConfigurationMethod.CONSTRUCTOR_NAME, ConfigurationMethod.toInternalParamsSignature(methodParameterTypes), ConfigurationMemberKind.PRESENT);
+        }
     }
 
     @Override
@@ -97,23 +113,39 @@ public class ParserConfigurationAdapter implements ReflectionConfigurationParser
     }
 
     @Override
-    public void registerPublicMethods(ConfigurationType type) {
-        type.setAllPublicMethods();
+    public void registerPublicMethods(ConfigurationType type, boolean queriedOnly) {
+        if (queriedOnly) {
+            type.setQueryAllPublicMethods();
+        } else {
+            type.setAllPublicMethods();
+        }
     }
 
     @Override
-    public void registerDeclaredMethods(ConfigurationType type) {
-        type.setAllDeclaredMethods();
+    public void registerDeclaredMethods(ConfigurationType type, boolean queriedOnly) {
+        if (queriedOnly) {
+            type.setQueryAllDeclaredMethods();
+        } else {
+            type.setAllDeclaredMethods();
+        }
     }
 
     @Override
-    public void registerPublicConstructors(ConfigurationType type) {
-        type.setAllPublicConstructors();
+    public void registerPublicConstructors(ConfigurationType type, boolean queriedOnly) {
+        if (queriedOnly) {
+            type.setQueryAllPublicConstructors();
+        } else {
+            type.setAllPublicConstructors();
+        }
     }
 
     @Override
-    public void registerDeclaredConstructors(ConfigurationType type) {
-        type.setAllDeclaredConstructors();
+    public void registerDeclaredConstructors(ConfigurationType type, boolean queriedOnly) {
+        if (queriedOnly) {
+            type.setQueryAllDeclaredConstructors();
+        } else {
+            type.setAllDeclaredConstructors();
+        }
     }
 
     @Override

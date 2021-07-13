@@ -28,6 +28,7 @@ import static com.oracle.svm.core.hub.DynamicHub.NO_CLASS_LOADER;
 
 import java.security.ProtectionDomain;
 
+import com.oracle.svm.core.hub.DynamicHub.ReflectionData;
 import com.oracle.svm.core.util.VMError;
 
 /** An optional, non-immutable companion to a {@link DynamicHub} instance. */
@@ -37,6 +38,7 @@ public final class DynamicHubCompanion {
     private String packageName;
     private Object classLoader = NO_CLASS_LOADER;
     private ProtectionDomain protectionDomain;
+    private ReflectionData extendedRD;
 
     public DynamicHubCompanion(DynamicHub hub) {
         this.hub = hub;
@@ -74,5 +76,19 @@ public final class DynamicHubCompanion {
     public void setProtectionDomain(ProtectionDomain domain) {
         VMError.guarantee(protectionDomain == null && domain != null);
         protectionDomain = domain;
+    }
+
+    public boolean hasExtendedRD() {
+        return extendedRD != null;
+    }
+
+    public ReflectionData getExtendedRD() {
+        VMError.guarantee(extendedRD != null);
+        return extendedRD;
+    }
+
+    public void setExtendedRD(ReflectionData rd) {
+        VMError.guarantee(rd != null && rd != ReflectionData.EMPTY);
+        extendedRD = rd;
     }
 }

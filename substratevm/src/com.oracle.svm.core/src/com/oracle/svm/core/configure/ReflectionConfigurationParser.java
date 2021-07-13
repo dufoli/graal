@@ -93,19 +93,19 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
                     /* Already handled. */
                 } else if (name.equals("allDeclaredConstructors")) {
                     if (asBoolean(value, "allDeclaredConstructors")) {
-                        delegate.registerDeclaredConstructors(clazz);
+                        delegate.registerDeclaredConstructors(clazz, false);
                     }
                 } else if (name.equals("allPublicConstructors")) {
                     if (asBoolean(value, "allPublicConstructors")) {
-                        delegate.registerPublicConstructors(clazz);
+                        delegate.registerPublicConstructors(clazz, false);
                     }
                 } else if (name.equals("allDeclaredMethods")) {
                     if (asBoolean(value, "allDeclaredMethods")) {
-                        delegate.registerDeclaredMethods(clazz);
+                        delegate.registerDeclaredMethods(clazz, false);
                     }
                 } else if (name.equals("allPublicMethods")) {
                     if (asBoolean(value, "allPublicMethods")) {
-                        delegate.registerPublicMethods(clazz);
+                        delegate.registerPublicMethods(clazz, false);
                     }
                 } else if (name.equals("allDeclaredFields")) {
                     if (asBoolean(value, "allDeclaredFields")) {
@@ -123,8 +123,26 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
                     if (asBoolean(value, "allPublicClasses")) {
                         delegate.registerPublicClasses(clazz);
                     }
+                } else if (name.equals("queryAllDeclaredConstructors")) {
+                    if (asBoolean(value, "queryAllDeclaredConstructors")) {
+                        delegate.registerDeclaredConstructors(clazz, true);
+                    }
+                } else if (name.equals("queryAllPublicConstructors")) {
+                    if (asBoolean(value, "queryAllPublicConstructors")) {
+                        delegate.registerPublicConstructors(clazz, true);
+                    }
+                } else if (name.equals("queryAllDeclaredMethods")) {
+                    if (asBoolean(value, "queryAllDeclaredMethods")) {
+                        delegate.registerDeclaredMethods(clazz, true);
+                    }
+                } else if (name.equals("queryAllPublicMethods")) {
+                    if (asBoolean(value, "queryAllPublicMethods")) {
+                        delegate.registerPublicMethods(clazz, true);
+                    }
                 } else if (name.equals("methods")) {
-                    parseMethods(asList(value, "Attribute 'methods' must be an array of method descriptors"), clazz);
+                    parseMethods(asList(value, "Attribute 'methods' must be an array of method descriptors"), clazz, false);
+                } else if (name.equals("queriedMethods")) {
+                    parseMethods(asList(value, "Attribute 'queriedMethods' must be an array of method descriptors"), clazz, true);
                 } else if (name.equals("fields")) {
                     parseFields(asList(value, "Attribute 'fields' must be an array of field descriptors"), clazz);
                 } else {
@@ -173,13 +191,13 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
         }
     }
 
-    private void parseMethods(List<Object> methods, T clazz) {
+    private void parseMethods(List<Object> methods, T clazz, boolean queriedOnly) {
         for (Object method : methods) {
-            parseMethod(asMap(method, "Elements of 'methods' array must be method descriptor objects"), clazz);
+            parseMethod(asMap(method, "Elements of 'methods' array must be method descriptor objects"), clazz, queriedOnly);
         }
     }
 
-    private void parseMethod(Map<String, Object> data, T clazz) {
+    private void parseMethod(Map<String, Object> data, T clazz, boolean queriedOnly) {
         String methodName = null;
         List<T> methodParameterTypes = null;
         for (Map.Entry<String, Object> entry : data.entrySet()) {
@@ -206,9 +224,9 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
         if (methodParameterTypes != null) {
             try {
                 if (isConstructor) {
-                    delegate.registerConstructor(clazz, methodParameterTypes);
+                    delegate.registerConstructor(clazz, methodParameterTypes, queriedOnly);
                 } else {
-                    delegate.registerMethod(clazz, methodName, methodParameterTypes);
+                    delegate.registerMethod(clazz, methodName, methodParameterTypes, queriedOnly);
                 }
             } catch (NoSuchMethodException e) {
                 handleError("Method " + formatMethod(clazz, methodName, methodParameterTypes) + " not found.");
@@ -219,9 +237,9 @@ public final class ReflectionConfigurationParser<T> extends ConfigurationParser 
             try {
                 boolean found;
                 if (isConstructor) {
-                    found = delegate.registerAllConstructors(clazz);
+                    found = delegate.registerAllConstructors(clazz, queriedOnly);
                 } else {
-                    found = delegate.registerAllMethodsWithName(clazz, methodName);
+                    found = delegate.registerAllMethodsWithName(clazz, methodName, queriedOnly);
                 }
                 if (!found) {
                     throw new JSONParserException("Method " + formatMethod(clazz, methodName) + " not found");

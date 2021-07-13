@@ -50,4 +50,8 @@ public interface ReflectionRegistry {
 
     void register(boolean finalIsWritable, Field... fields);
 
+    @SuppressWarnings("unused")
+    default void registerAsQueried(Executable... methods) {
+        // TODO unimplemented/shouldNotReachHere?
+    }
 }

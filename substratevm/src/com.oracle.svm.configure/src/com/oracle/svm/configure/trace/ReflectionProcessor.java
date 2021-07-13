@@ -173,14 +173,19 @@ class ReflectionProcessor extends AbstractProcessor {
             case "findMethodHandle":
                 memberKind = "findMethodHandle".equals(function) ? ConfigurationMemberKind.PRESENT : ConfigurationMemberKind.DECLARED;
                 // fall through
-            case "getMethod": {
+            case "getMethod":
+            case "invoke": {
                 expectSize(args, 2);
                 String name = (String) args.get(0);
                 List<?> parameterTypes = (List<?>) args.get(1);
                 if (parameterTypes == null) { // tolerated and equivalent to no parameter types
                     parameterTypes = Collections.emptyList();
                 }
-                configuration.getOrCreateType(clazzOrDeclaringClass).addMethod(name, SignatureUtil.toInternalSignature(parameterTypes), memberKind);
+                if (function.equals("invoke") || function.equals("findMethodHandle")) {
+                    configuration.getOrCreateType(clazzOrDeclaringClass).addMethod(name, SignatureUtil.toInternalSignature(parameterTypes), memberKind);
+                } else {
+                    configuration.getOrCreateType(clazzOrDeclaringClass).addQueriedMethod(name, SignatureUtil.toInternalSignature(parameterTypes), memberKind);
+                }
                 if (!clazzOrDeclaringClass.equals(clazz)) {
                     configuration.getOrCreateType(clazz);
                 }
@@ -198,7 +203,11 @@ class ReflectionProcessor extends AbstractProcessor {
                 }
                 String signature = SignatureUtil.toInternalSignature(parameterTypes);
                 assert clazz.equals(clazzOrDeclaringClass) : "Constructor can only be accessed via declaring class";
-                configuration.getOrCreateType(clazzOrDeclaringClass).addMethod(ConfigurationMethod.CONSTRUCTOR_NAME, signature, memberKind);
+                if (function.equals("findConstructorHandle")) {
+                    configuration.getOrCreateType(clazzOrDeclaringClass).addMethod(ConfigurationMethod.CONSTRUCTOR_NAME, signature, memberKind);
+                } else {
+                    configuration.getOrCreateType(clazzOrDeclaringClass).addQueriedMethod(ConfigurationMethod.CONSTRUCTOR_NAME, signature, memberKind);
+                }
                 break;
             }
 
