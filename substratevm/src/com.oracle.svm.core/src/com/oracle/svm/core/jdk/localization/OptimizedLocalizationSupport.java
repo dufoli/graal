@@ -76,10 +76,10 @@ public class OptimizedLocalizationSupport extends LocalizationSupport {
     }
 
     @Override
-    public void addClassBasedResourceBundle(Class<?> bundleClass) {
+    public void addClassBasedResourceBundle(String basename, Class<?> bundleClass) {
         try {
             ResourceBundle bundle = ((ResourceBundle) ReflectionUtil.newInstance(bundleClass));
-            prepareBundle(bundle.getBaseBundleName(), bundle, bundle.getLocale());
+            prepareBundle(basename, bundle, bundle.getLocale());
         } catch (ReflectionUtil.ReflectionUtilError e) {
             UserError.abort(e, "Failed to instantiated bundle from class %s, reason %s", bundleClass, e.getCause().getMessage());
         }

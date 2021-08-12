@@ -422,12 +422,11 @@ public abstract class LocalizationFeature implements Feature {
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public void addClassBasedResourceBundle(String className) {
-        // todo is this the proper way of loading the class? probably not...
+    public void addClassBasedResourceBundle(String basename, String className) {
         Class<?> bundleClass = findClassByName.apply(className);
         UserError.guarantee(ResourceBundle.class.isAssignableFrom(bundleClass), "%s is not a subclass of ResourceBundle", bundleClass.getName());
-        trace("Adding class based resource bundle: " + className + " " + bundleClass + " " + bundleClass.getName());
-        support.addClassBasedResourceBundle(bundleClass);
+        trace("Adding class based resource bundle: " + className + " " + bundleClass);
+        support.addClassBasedResourceBundle(basename, bundleClass);
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)

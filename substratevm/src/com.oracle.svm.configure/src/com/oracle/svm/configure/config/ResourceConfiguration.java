@@ -67,8 +67,8 @@ public class ResourceConfiguration implements ConfigurationBase {
         }
 
         @Override
-        public void addClassBasedResourceBundle(String className) {
-            configuration.addClassBasedResourceBundle(className);
+        public void addClassBasedResourceBundle(String basename, String className) {
+            configuration.addClassBasedResourceBundle(basename, className);
         }
 
         @Override
@@ -77,13 +77,8 @@ public class ResourceConfiguration implements ConfigurationBase {
         }
     }
 
-    private void addClassBasedResourceBundle(String className) {
-        String baseName = className;
-        int split = baseName.lastIndexOf('_');
-        if (split != -1) {
-            baseName = baseName.substring(0, split);
-        }
-        getOrCreateBundleConfig(baseName).classNames.add(className);
+    private void addClassBasedResourceBundle(String basename, String className) {
+        getOrCreateBundleConfig(basename).classNames.add(className);
     }
 
     public static class BundleConfiguration {

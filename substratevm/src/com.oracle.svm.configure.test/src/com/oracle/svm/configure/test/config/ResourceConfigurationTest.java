@@ -109,7 +109,7 @@ public class ResourceConfigurationTest {
                 }
 
                 @Override
-                public void addClassBasedResourceBundle(String className) {
+                public void addClassBasedResourceBundle(String basename, String className) {
 
                 }
 
