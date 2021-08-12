@@ -426,9 +426,9 @@ public abstract class LocalizationFeature implements Feature {
     public void addClassBasedResourceBundle(String className) {
         // todo is this the proper way of loading the class? probably not...
         Class<?> bundleClass = findClassByName.apply(className);
+        UserError.guarantee(ResourceBundle.class.isAssignableFrom(bundleClass), "%s is not a subclass of ResourceBundle", bundleClass.getName());
         trace("Adding class based resource bundle: " + className + " " + bundleClass + " " + bundleClass.getName());
-        RuntimeReflection.register(bundleClass);
-        RuntimeReflection.registerForReflectiveInstantiation(bundleClass);
+        support.addClassBasedResourceBundle(bundleClass);
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)

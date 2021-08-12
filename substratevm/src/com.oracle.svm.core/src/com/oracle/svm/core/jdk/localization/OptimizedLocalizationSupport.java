@@ -25,6 +25,7 @@
 package com.oracle.svm.core.jdk.localization;
 
 import com.oracle.svm.core.option.SubstrateOptionsParser;
+import com.oracle.svm.core.util.UserError;
 import org.graalvm.collections.Pair;
 
 import java.util.HashMap;
@@ -71,6 +72,16 @@ public class OptimizedLocalizationSupport extends LocalizationSupport {
                         "Register the resource bundle using the option " + includeResourceBundlesOption + baseName + ".";
         throw new MissingResourceException(errorMessage, this.getClass().getName(), baseName);
 
+    }
+
+    @Override
+    public void addClassBasedResourceBundle(Class<?> bundleClass) {
+        try {
+            ResourceBundle bundle = ((ResourceBundle) bundleClass.newInstance());
+            prepareBundle(bundle.getBaseBundleName(), bundle, bundle.getLocale());
+        } catch (ReflectiveOperationException e) {
+            UserError.abort(e, "Failed to instantiated bundle from class %s", bundleClass);
+        }
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
