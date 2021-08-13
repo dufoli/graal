@@ -29,6 +29,9 @@ import com.oracle.svm.core.util.UserError;
 import com.oracle.svm.util.ReflectionUtil;
 import org.graalvm.collections.Pair;
 
+//Checkstyle: allow reflection
+
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -75,14 +78,30 @@ public class OptimizedLocalizationSupport extends LocalizationSupport {
 
     }
 
+    private final Field bundleName = ReflectionUtil.lookupField(ResourceBundle.class, "name");
+    private final Field bundleLocale = ReflectionUtil.lookupField(ResourceBundle.class, "locale");
+
     @Override
     public void addClassBasedResourceBundle(String basename, Class<?> bundleClass) {
         try {
             ResourceBundle bundle = ((ResourceBundle) ReflectionUtil.newInstance(bundleClass));
-            prepareBundle(basename, bundle, bundle.getLocale());
-        } catch (ReflectionUtil.ReflectionUtilError e) {
+            Locale locale = extractLocale(bundleClass);
+            /*- Set the basename and locale to be consistent with JVM lookup process */
+            bundleName.set(bundle, basename);
+            bundleLocale.set(bundle, locale);
+            prepareBundle(basename, bundle, locale);
+        } catch (ReflectionUtil.ReflectionUtilError | ReflectiveOperationException e) {
             UserError.abort(e, "Failed to instantiated bundle from class %s, reason %s", bundleClass, e.getCause().getMessage());
         }
+    }
+
+    private static Locale extractLocale(Class<?> bundleClass) {
+        String name = bundleClass.getName();
+        int split = name.lastIndexOf('_');
+        if (split == -1) {
+            return Locale.ROOT;
+        }
+        return parseLocaleFromTag(name.substring(split + 1));
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
