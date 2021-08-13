@@ -32,9 +32,9 @@ public interface ResourcesRegistry {
 
     void ignoreResources(String pattern);
 
-    void addResourceBundles(String name);
+    void addResourceBundle(String name);
 
-    void addClassBasedResourceBundle(String basename, String className);
+    void addResourceBundle(String basename, Collection<Locale> locales);
 
-    void addResourceBundles(String basename, Collection<Locale> locales);
+    void addClassResourceBundle(String basename, String className);
 }

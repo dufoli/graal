@@ -422,11 +422,11 @@ public abstract class LocalizationFeature implements Feature {
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public void addClassBasedResourceBundle(String basename, String className) {
+    public void prepareClassResourceBundle(String basename, String className) {
         Class<?> bundleClass = findClassByName.apply(className);
         UserError.guarantee(ResourceBundle.class.isAssignableFrom(bundleClass), "%s is not a subclass of ResourceBundle", bundleClass.getName());
         trace("Adding class based resource bundle: " + className + " " + bundleClass);
-        support.addClassBasedResourceBundle(basename, bundleClass);
+        support.prepareClassResourceBundle(basename, bundleClass);
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)

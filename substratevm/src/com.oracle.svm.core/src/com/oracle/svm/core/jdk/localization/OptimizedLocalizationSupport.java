@@ -82,7 +82,7 @@ public class OptimizedLocalizationSupport extends LocalizationSupport {
     private final Field bundleLocale = ReflectionUtil.lookupField(ResourceBundle.class, "locale");
 
     @Override
-    public void addClassBasedResourceBundle(String basename, Class<?> bundleClass) {
+    public void prepareClassResourceBundle(String basename, Class<?> bundleClass) {
         try {
             ResourceBundle bundle = ((ResourceBundle) ReflectionUtil.newInstance(bundleClass));
             Locale locale = extractLocale(bundleClass);
