@@ -108,6 +108,12 @@ public class LocalizationSupport {
 
     }
 
+    @Platforms(Platform.HOSTED_ONLY.class)
+    @SuppressWarnings("unused")
+    protected void onClassBundlePrepared(Class<?> bundleClass) {
+
+    }
+
     @SuppressWarnings("unused")
     public boolean shouldSubstituteLoadLookup(String className) {
         /*- By default, keep the original code */
@@ -144,5 +150,6 @@ public class LocalizationSupport {
     public void prepareClassResourceBundle(@SuppressWarnings("unused") String basename, Class<?> bundleClass) {
         RuntimeReflection.register(bundleClass);
         RuntimeReflection.registerForReflectiveInstantiation(bundleClass);
+        onClassBundlePrepared(bundleClass);
     }
 }

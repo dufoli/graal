@@ -78,8 +78,8 @@ public class OptimizedLocalizationSupport extends LocalizationSupport {
 
     }
 
-    private final Field bundleName = ReflectionUtil.lookupField(ResourceBundle.class, "name");
-    private final Field bundleLocale = ReflectionUtil.lookupField(ResourceBundle.class, "locale");
+    private final Field bundleNameField = ReflectionUtil.lookupField(ResourceBundle.class, "name");
+    private final Field bundleLocaleField = ReflectionUtil.lookupField(ResourceBundle.class, "locale");
 
     @Override
     public void prepareClassResourceBundle(String basename, Class<?> bundleClass) {
@@ -87,8 +87,8 @@ public class OptimizedLocalizationSupport extends LocalizationSupport {
             ResourceBundle bundle = ((ResourceBundle) ReflectionUtil.newInstance(bundleClass));
             Locale locale = extractLocale(bundleClass);
             /*- Set the basename and locale to be consistent with JVM lookup process */
-            bundleName.set(bundle, basename);
-            bundleLocale.set(bundle, locale);
+            bundleNameField.set(bundle, basename);
+            bundleLocaleField.set(bundle, locale);
             prepareBundle(basename, bundle, locale);
         } catch (ReflectionUtil.ReflectionUtilError | ReflectiveOperationException e) {
             UserError.abort(e, "Failed to instantiated bundle from class %s, reason %s", bundleClass, e.getCause().getMessage());
