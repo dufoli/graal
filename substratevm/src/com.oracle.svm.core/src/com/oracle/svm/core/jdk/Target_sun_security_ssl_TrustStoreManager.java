@@ -83,8 +83,8 @@ final class TrustStoreManagerFeature implements Feature {
         /*
          * The class initializer of UntrustedCertificates loads the file
          * lib/security/blacklisted.certs, so this class must be initialized at image build time.
-         * This is the default anyway for code JDK classes, but since this class is relevant
-         * for security we spell it out explicitly.
+         * This is the default anyway for code JDK classes, but since this class is relevant for
+         * security we spell it out explicitly.
          *
          * Note when a runtime certificate file is specified, we still honor/use the build time
          * lib/security/blacklisted.certs file
@@ -193,6 +193,10 @@ final class TrustStoreManagerSupport {
 
 @TargetClass(className = TrustStoreManagerFeature.TRUST_STORE_MANAGER_CLASS_NAME)
 final class Target_sun_security_ssl_TrustStoreManager {
+    /*
+     * This singleton object caches the last retrieved trusted KeyStore and set of trusted
+     * certificates.
+     */
     @Alias @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.NewInstance, declClassName = TrustStoreManagerFeature.TRUST_STORE_MANAGER_CLASS_NAME +
                     "$TrustAnchorManager") private static Target_sun_security_ssl_TrustStoreManager_TrustAnchorManager tam;
 
