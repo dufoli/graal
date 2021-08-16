@@ -40,17 +40,26 @@ to point to an accessible certificate file:
 If any of these properties are set and "javax.net.ssl.trustStore" does not point
 to an accessible file, then an UnsupportedFeatureError will be thrown.
 
-Note that this behavior is different than the JVM; while in the event of an
-unset/invalid "javax.net.ssl.trustStore" system property the JVM will attempt to
-fallback to use a certificate file shipped within the JDK, such files will not
-be present alongside the image executable and hence cannot be used as a
+Note that this behavior is different than OpenJDK. When the
+"javax.net.ssl.trustStore" system property is unset/invalid, OpenJDK will
+fallback to using a certificate file shipped within the JDK; however, such files
+will not be present alongside the image executable and hence cannot be used as a
 fallback.
 
 During the execution, it also possible to dynamically change the
 "javax.net.ssl.trustStore\*" properties and for the default trusted KeyStore to be
 updated accordingly.
 
-Finally, whenever all of the "javax.net.ssl.trustStore\*" system properities
+Finally, whenever all of the "javax.net.ssl.trustStore\*" system properties
 listed above are unset, the default trusted KeyStore will be the one captured
 during buildtime, as described in the [prior section](#buildtime-options).
 
+## Untrusted Certificates
+
+During the image building process, a list of untrusted certificates is loaded
+from the file <java.home>/lib/security/blacklisted.certs. This file is used
+when validating certificates at both buildtime and runtime.  In other words,
+when a new certificate file is specified at runtime via setting the
+"javax.net.ssl.trustStore\*" system properties, the new certificates will still
+be checked against the <java.home>/lib/security/blacklisted.certs loaded at
+image buildtime.

@@ -83,7 +83,7 @@ final class TrustStoreManagerFeature implements Feature {
         /*
          * The class initializer of UntrustedCertificates loads the file
          * lib/security/blacklisted.certs, so this class must be initialized at image build time.
-         * This is the default anyway for code JDK classes, but since this this class is relevant
+         * This is the default anyway for code JDK classes, but since this class is relevant
          * for security we spell it out explicitly.
          *
          * Note when a runtime certificate file is specified, we still honor/use the build time
@@ -174,11 +174,8 @@ final class TrustStoreManagerSupport {
                 temporaryTime = f.lastModified();
             } else {
                 // The file is inaccessible.
-                if (SSLLogger.isOn &&
-                                SSLLogger.isOn("trustmanager")) {
-                    SSLLogger.fine(
-                                    "Inaccessible trust store: " +
-                                                    storePropName);
+                if (SSLLogger.isOn && SSLLogger.isOn("trustmanager")) {
+                    SSLLogger.fine("Inaccessible trust store: " + storePropName);
                 }
 
                 return null;
